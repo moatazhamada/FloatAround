@@ -2,6 +2,8 @@
 
 Content that steps around a floating overlay, row by row, as you scroll. For Jetpack Compose and Flutter.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24144275.svg)](https://doi.org/10.5281/zenodo.24144275) · Idea paper: *Exclusion Zones for Floating Overlays* ([PDF](docs/paper/floataround-paper.pdf))
+
 ![FloatAround demo](docs/demo.gif)
 
 A floating navigation pill on a tablet or unfolded foldable covers whatever scrolls underneath it. Padding the whole page wastes the space the pill was meant to free, because the pill is short and most rows never touch it. FloatAround gives every element its own exclusion zone instead:
@@ -121,6 +123,10 @@ Because it is just geometry, it ports to any toolkit that can read an element's 
 ## Tests
 
 `./gradlew :floataround:testDebugUnitTest` and `cd flutter/float_around && flutter test`
+
+## Cite
+
+Mohamed, M. (2026). *Exclusion Zones for Floating Overlays: Per-Element, Scroll-Linked Avoidance on Large Screens*. Zenodo. https://doi.org/10.5281/zenodo.24144275
 
 ## License
 
