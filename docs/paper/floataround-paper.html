@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exclusion Zones for Floating Overlays</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  body { font-family: "Times New Roman", Times, serif; font-size: 11pt; line-height: 1.45; color: #111; max-width: 170mm; margin: 0 auto; }
+  h1 { font-size: 18pt; text-align: center; margin: 0 0 6pt; line-height: 1.2; }
+  .authors { text-align: center; margin-bottom: 4pt; }
+  .meta { text-align: center; font-size: 9.5pt; color: #444; margin-bottom: 16pt; }
+  h2 { font-size: 12.5pt; margin: 16pt 0 4pt; }
+  h3 { font-size: 11pt; margin: 10pt 0 2pt; font-style: italic; }
+  .abstract { font-size: 10pt; margin: 0 8mm 12pt; }
+  .abstract b { display: block; text-align: center; margin-bottom: 3pt; }
+  pre { font-family: Menlo, Consolas, monospace; font-size: 8.8pt; background: #f4f4f4; padding: 8pt; border-radius: 3pt; white-space: pre-wrap; page-break-inside: avoid; }
+  code { font-family: Menlo, Consolas, monospace; font-size: 9pt; }
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 6pt 0; page-break-inside: avoid; }
+  th, td { border: 1px solid #999; padding: 3pt 5pt; text-align: left; vertical-align: top; }
+  figure { margin: 10pt 0; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 95mm; }
+  figcaption { font-size: 9pt; color: #333; margin-top: 3pt; }
+  ol.refs { font-size: 9.5pt; padding-left: 18pt; }
+  .kw { font-size: 9.5pt; margin: 0 8mm 12pt; }
+</style>
+</head>
+<body>
+
+<h1>Exclusion Zones for Floating Overlays:<br>Per-Element, Scroll-Linked Avoidance on Large Screens</h1>
+<div class="authors">Moataz Mohamed<br>House of Algorithms</div>
+<div class="meta">Idea paper · November 2026 · Reference implementation: github.com/moatazhamada/FloatAround</div>
+
+<div class="abstract"><b>Abstract</b>
+Floating navigation surfaces such as pill-shaped rails are increasingly common on tablets and unfolded foldables. They free space compared with edge-docked navigation, but they also cover whatever scrolls underneath them. The two prevailing responses, a page-wide inset or letting content pass underneath, either waste the space the overlay was meant to free or hide content. We describe <i>exclusion zones</i>, a layout pattern in which every element computes its own inset from its current distance to the overlay, easing in over a short feather distance with a smootherstep curve. The inset is a pure function of geometry rather than an animation, so it stays synchronised with scrolling, folding and resizing. We distinguish four element roles (shifting, compressing, padding-shifting and full-bleed), present the algorithm, discuss related techniques in text layout and platform inset systems, and provide an open-source Jetpack Compose implementation. We close with the limitations of the approach and a proposed user study.
+</div>
+<div class="kw"><b>Keywords:</b> adaptive layout, large screens, foldables, floating navigation, exclusion paths, UI design patterns, Jetpack Compose.</div>
+
+<h2>1. Introduction</h2>
+<p>Large-screen guidance for Android recommends moving navigation from a bottom bar to a side rail once the window is wide enough [6]. Recent design languages go further and detach the rail from the edge: it floats as a rounded pill with a shadow, and the page extends behind it [3]. The visual result is lighter, but the overlay now intersects scrolling content. Titles, the first item of a horizontal carousel and the first words of every line in a paragraph can all end up underneath it.</p>
+<p>The pill is typically short relative to the window. On an unfolded foldable in landscape, a five-item pill occupies roughly a third of the height. A page-wide start inset therefore reserves a strip of space for the whole page to solve a problem that only affects the rows currently beside the pill.</p>
+<p>This paper describes a pattern that resolves the conflict at the level of individual elements. It is presented in the problem / forces / solution / consequences structure common in pattern literature, followed by the algorithm, related work and limitations.</p>
+
+<figure>
+  <img src="../before-after.png" alt="Content running under the pill compared with content stepping aside">
+  <figcaption>Figure 1. Left: avoidance off, content runs under the floating pill. Right: avoidance on, paragraphs, list rows and the leading header line step aside only near the pill.</figcaption>
+</figure>
+
+<h2>2. The pattern</h2>
+<h3>Context</h3>
+<p>A scrolling page on a window wide enough for side navigation, with a floating overlay (rail, pill, toolbar, mini-player) anchored to one horizontal edge and covering only part of the window height.</p>
+<h3>Problem</h3>
+<p>How can content remain fully visible beside the overlay without giving up the space the overlay leaves free everywhere else?</p>
+<h3>Forces</h3>
+<ul>
+  <li><b>Visibility:</b> interactive and textual content must not be covered.</li>
+  <li><b>Space:</b> rows above and below the overlay should keep the full window width.</li>
+  <li><b>Continuity:</b> movement must feel continuous during scrolling, folding, rotation and window resizing; abrupt jumps are distracting.</li>
+  <li><b>Element semantics:</b> a paragraph, a section header, a carousel and a hero image should not react the same way.</li>
+  <li><b>Cost:</b> the solution must not trigger work for the whole page on every scroll frame.</li>
+</ul>
+<h3>Solution</h3>
+<p>Treat the overlay as an obstacle that each element avoids individually. Every participating element reads its own bounds and the obstacle's bounds and computes a start inset: the full horizontal intrusion plus a gap when it overlaps the obstacle vertically, a smoothly eased fraction of it within a feather distance, and zero beyond. The inset is applied as layout, not as an animation, so it is always a function of the current geometry.</p>
+<h3>Element roles</h3>
+<table>
+  <tr><th>Role</th><th>Behaviour</th><th>Examples</th></tr>
+  <tr><td>Shifting</td><td>Gives up its start edge; its end edge stays fixed, so content narrows and may rewrap.</td><td>Paragraphs (each paragraph separately), list rows, cards, headings</td></tr>
+  <tr><td>Compressing</td><td>Only a decorative sub-element absorbs the inset; the semantic content does not move.</td><td>The leading rule of a centred section header</td></tr>
+  <tr><td>Padding-shifting</td><td>The container keeps its full frame; the inset is added to its content padding.</td><td>Horizontal carousels: the first item steps aside, later items still scroll to the edge</td></tr>
+  <tr><td>Full-bleed</td><td>Does not participate and runs under the overlay.</td><td>Hero images and video; text placed on them is shifting</td></tr>
+</table>
+<h3>Consequences</h3>
+<ul>
+  <li>Content is never covered while rows far from the overlay keep the full width.</li>
+  <li>Because the inset is derived from position, scrolling, folding, unfolding and resizing need no special handling: when the obstacle or the element moves, the inset follows.</li>
+  <li>Shifting text can rewrap and change height, which moves the elements below it (Section 5).</li>
+  <li>Each element must declare its role. This is a design decision per component, not a global switch.</li>
+</ul>
+
+<h2>3. Algorithm</h2>
+<p>Let the element bounds be <i>r</i> and the obstacle bounds <i>o</i>, both in a shared coordinate space, with gap <i>g</i> and feather <i>f</i>. For an obstacle on the start edge in a left-to-right layout:</p>
+<pre>intrusion = o.right + g - r.left              (RTL: r.right - o.left + g)
+if intrusion &lt;= 0        return 0            // already clear horizontally
+d = max(o.top - r.bottom, r.top - o.bottom, 0)  // vertical gap, 0 when overlapping
+if d == 0                return intrusion
+if d &gt;= f                return 0
+t = 1 - d / f
+return intrusion * t³ (6t² - 15t + 10)       // smootherstep [5]</pre>
+<p>Smootherstep has zero first and second derivatives at both ends, so an element starts and stops moving without a visible kink in velocity or acceleration. With <i>f</i> = 0 the function degrades to a hard step: overlapping elements step aside, all others do not. In the reference implementation <i>g</i> = 12dp and <i>f</i> = 140dp.</p>
+<p>The function has no state and no time parameter. This is the key difference from an animated transition: there is nothing to start, cancel or interrupt, and the result for a given scroll position is always the same.</p>
+
+<h2>4. Reference implementation</h2>
+<p>FloatAround implements the pattern for Jetpack Compose. The overlay publishes its bounds with <code>Modifier.floatingObstacle</code>. Shifting and compressing elements use <code>Modifier.avoid</code>, a layout modifier node that observes its own global position and reads the inset during the measure pass; it measures its child with reduced width and places it at the inset. Since the inset is read in the layout phase, a change re-lays out only the affected elements and triggers no recomposition. Padding-shifting containers use a tracker that observes the container position and a <code>PaddingValues</code> implementation that adds the inset on the start side. The pure function is exposed separately for ports to other toolkits.</p>
+<pre>val obstacle = remember { FloatingObstacle(gap = 12.dp, feather = 140.dp) }
+Pill(Modifier.align(Alignment.CenterStart).floatingObstacle(obstacle))
+Text(paragraph, Modifier.avoid(obstacle))
+HorizontalDivider(Modifier.weight(1f).avoid(obstacle))
+LazyRow(Modifier.track(tracker), contentPadding = base.plusAvoidance(tracker, density))</pre>
+
+<h2>5. Related work</h2>
+<p><b>Text exclusion paths.</b> Apple's TextKit lets a text container exclude arbitrary paths so that lines flow around them [1], and CSS Shapes lets inline content wrap around a float's shape [2]. These are the closest conceptual relatives: per-line avoidance of an obstacle. They operate on lines of text inside a single text container and are evaluated once per layout, not per element across a scrolling page.</p>
+<p><b>Background extension.</b> iPadOS 26 floats the sidebar and lets content extend beneath it, mirroring and blurring the content into the covered area so that it appears continuous [3][4]. This preserves full-bleed imagery, which corresponds to the full-bleed role here, but does not move interactive or textual content out from under the overlay.</p>
+<p><b>Window insets and rulers.</b> Android reports system bars, cutouts and the IME as window insets, and Compose's <code>WindowInsetsRulers</code> with <code>Modifier.fitInside</code> lets a layout fit within such regions, including custom ones [7]. The documentation cautions against using them inside scroll containers; insets are designed for page-level safe areas rather than for elements whose distance to a region changes every frame.</p>
+<p><b>Collapsing and scroll-aware bars.</b> Material's scroll behaviours hide or collapse app bars in response to scrolling [6]. They move the overlay out of the way; exclusion zones move the content instead and keep the navigation visible.</p>
+
+<h2>6. Limitations and future work</h2>
+<ul>
+  <li><b>Rewrapping.</b> A shifting paragraph that narrows can gain a line and push following elements down. The feather makes the change gradual, but it remains a vertical side effect of a horizontal adjustment.</li>
+  <li><b>One-frame latency.</b> Element positions are observed after layout, so the inset reflects the previous frame's position. At ordinary scroll speeds this was not perceptible in our tests; a ruler-based implementation could remove it.</li>
+  <li><b>Single edge.</b> The reference implementation handles one obstacle on the start edge. Multiple obstacles and top or bottom overlays (floating toolbars, mini-players) are natural extensions: the inset becomes the maximum over obstacles per edge.</li>
+  <li><b>No user evaluation yet.</b> We propose a within-subjects study comparing three conditions (content under the overlay, page-wide inset, exclusion zones) on reading speed, mis-taps near the overlay, perceived motion and preference, on an unfolded foldable and a tablet.</li>
+</ul>
+
+<h2>7. Conclusion</h2>
+<p>Floating overlays turn navigation into an obstacle inside the content area. Treating that obstacle the way typography treats a figure, as something each line or element flows around, keeps content visible without giving up the space floating navigation was meant to create. Defining the inset as a pure, eased function of geometry rather than as an animation makes the behaviour stable across scrolling, folding and resizing, and keeps the implementation small.</p>
+
+<h2>References</h2>
+<ol class="refs">
+  <li>Apple. <i>NSTextContainer.exclusionPaths</i>. Apple Developer Documentation.</li>
+  <li>W3C. <i>CSS Shapes Module Level 1</i>. W3C Candidate Recommendation.</li>
+  <li>Apple. <i>Elevate the design of your iPad app</i>. WWDC 2025, session 208.</li>
+  <li>Apple. <i>backgroundExtensionEffect(isEnabled:)</i>. SwiftUI documentation.</li>
+  <li>K. Perlin. Improving Noise. <i>ACM Transactions on Graphics</i> 21(3), Proc. SIGGRAPH 2002, 681–682.</li>
+  <li>Google. <i>Adaptive app quality guidelines</i> and Material 3 navigation rail guidance. Android Developers.</li>
+  <li>Google. <i>About WindowInsetsRulers</i>. Android Developers, Jetpack Compose documentation.</li>
+</ol>
+</body>
+</html>
