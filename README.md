@@ -1,6 +1,6 @@
 # FloatAround
 
-Content that steps around a floating overlay, row by row, as you scroll. For Jetpack Compose.
+Content that steps around a floating overlay, row by row, as you scroll. For Jetpack Compose and Flutter.
 
 ![FloatAround demo](docs/demo.gif)
 
@@ -66,6 +66,40 @@ Box(Modifier.fillMaxSize()) {
 
 The inset is read during measure, so scrolling re-lays out only the affected elements and nothing recomposes. Right-to-left layouts are supported with the overlay on the right edge.
 
+## Flutter
+
+The same idea as a Flutter package lives in [`flutter/float_around`](flutter/float_around).
+
+```dart
+final obstacle = FloatingObstacle(gap: 12, feather: 140);
+
+Stack(children: [
+  ListView(children: [
+    Hero(),                                                    // full-bleed
+    Avoid(obstacle: obstacle, child: Text(paragraph)),          // steps aside
+    Row(children: [
+      Expanded(child: Avoid(obstacle: obstacle, child: Divider())), // only the leading line shortens
+      Text('Section'),
+      Expanded(child: Divider()),
+    ]),
+    AvoidanceBuilder(                                           // carousel shifts its padding
+      obstacle: obstacle,
+      builder: (context, inset) => ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsetsDirectional.only(start: 16 + inset),
+        children: cards,
+      ),
+    ),
+  ]),
+  Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: FloatingObstacleRegion(obstacle: obstacle, child: MyPill()),
+  ),
+]);
+```
+
+Run the example with `cd flutter/float_around/example && flutter run`.
+
 ## The idea in one function
 
 ```
@@ -86,7 +120,7 @@ Because it is just geometry, it ports to any toolkit that can read an element's 
 
 ## Tests
 
-`./gradlew :floataround:testDebugUnitTest`
+`./gradlew :floataround:testDebugUnitTest` and `cd flutter/float_around && flutter test`
 
 ## License
 
