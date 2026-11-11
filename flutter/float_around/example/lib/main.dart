@@ -252,10 +252,10 @@ class _Carousel extends StatelessWidget {
   Widget build(BuildContext context) => AvoidanceBuilder(
         obstacle: obstacle,
         builder: (context, inset) => SizedBox(
-          height: 120,
+          height: 132,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            padding: EdgeInsetsDirectional.only(start: 16 + inset, end: 16),
+            padding: EdgeInsetsDirectional.only(start: 16 + inset, end: 16, top: 4, bottom: 8),
             itemCount: 10,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) => SizedBox(
