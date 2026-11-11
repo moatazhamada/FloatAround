@@ -2,7 +2,7 @@
 
 Content that steps around a floating overlay, row by row, as you scroll.
 
-A floating navigation pill on a tablet or unfolded foldable covers whatever scrolls underneath it. Padding the whole page wastes the space the pill was meant to free. `float_around` gives every widget its own exclusion zone: widgets beside the pill step aside fully, widgets within a feather distance step aside partially (smootherstep), widgets further away keep the full width.
+A floating navigation pill on a tablet or unfolded foldable covers whatever scrolls underneath it. Padding the whole page wastes the space the pill was meant to free. `float_around` gives every widget its own exclusion zone: widgets beside the pill step aside fully, widgets within a feather distance step aside partially (smootherstep), widgets further away keep the full width. The pill can sit on either edge; each widget pads the side the pill is on.
 
 ![demo](https://raw.githubusercontent.com/moatazhamada/FloatAround/main/docs/demo.gif)
 
@@ -20,16 +20,20 @@ Avoid(obstacle: obstacle, child: Text(paragraph));
 // Containers that should shift their padding instead of their frame
 AvoidanceBuilder(
   obstacle: obstacle,
-  builder: (context, inset) => ListView(
+  builder: (context, insets) => ListView(
     scrollDirection: Axis.horizontal,
-    padding: EdgeInsetsDirectional.only(start: 16 + inset),
+    padding: EdgeInsets.fromLTRB(16 + insets.left, 0, 16 + insets.right, 0),
     children: cards,
   ),
 );
 ```
 
-`obstacle.enabled = false` switches avoidance off. Right-to-left layouts are supported with the overlay on the right edge.
+`obstacle.enabled = false` switches avoidance off.
 
-`startInset(row, obstacle, gap:, feather:, rtl:)` is the pure function behind it, if you want to apply the inset yourself.
+`avoidanceInsets(row, obstacle, gap:, feather:)` is the pure function behind it, if you want to apply the padding yourself.
+
+## iOS
+
+On iPhone Duo, iOS keeps a column on the camera side for the camera and status, and puts vertical bars in it right below them. The example does the same: the obstacle covers the status block plus the pill, and rows reclaim the column everywhere below the pill instead of leaving it empty. On iPad the pill floats on the leading edge, like the system sidebar.
 
 The same idea for Jetpack Compose, plus an idea paper, lives at https://github.com/moatazhamada/FloatAround.

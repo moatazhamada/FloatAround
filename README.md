@@ -84,9 +84,9 @@ Stack(children: [
     ]),
     AvoidanceBuilder(                                           // carousel shifts its padding
       obstacle: obstacle,
-      builder: (context, inset) => ListView(
+      builder: (context, insets) => ListView(
         scrollDirection: Axis.horizontal,
-        padding: EdgeInsetsDirectional.only(start: 16 + inset),
+        padding: EdgeInsets.fromLTRB(16 + insets.left, 0, 16 + insets.right, 0),
         children: cards,
       ),
     ),
@@ -98,7 +98,7 @@ Stack(children: [
 ]);
 ```
 
-Run the example with `cd flutter/float_around/example && flutter run`.
+The Flutter package also lets the pill float on either edge (it pads whichever side the pill is on), and its example follows iOS placement: on iPhone Duo the pill sits in the camera column below the status area. Run it with `cd flutter/float_around/example && flutter run`.
 
 ## The idea in one function
 

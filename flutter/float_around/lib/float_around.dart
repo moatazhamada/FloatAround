@@ -5,25 +5,32 @@ import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-/// How far [row] must give up its start edge to clear [obstacle].
+/// The padding [row] needs to clear [obstacle] on the side the obstacle sits on.
 ///
 /// Rows that overlap the obstacle vertically get the full intrusion plus [gap]. Rows within
 /// [feather] of it get a smootherstep-eased share. Rows further away, or already clear of it
-/// horizontally, get zero. With [rtl] the obstacle is expected on the right edge.
-double startInset(
+/// horizontally, get zero. An obstacle left of the row's centre insets the left edge; one to the
+/// right insets the right edge, so a pill can float on either side in any text direction.
+EdgeInsets avoidanceInsets(
   Rect row,
   Rect obstacle, {
   required double gap,
   required double feather,
-  bool rtl = false,
 }) {
-  final intrusion = rtl ? row.right - obstacle.left + gap : obstacle.right + gap - row.left;
-  if (intrusion <= 0) return 0;
+  final onLeft = obstacle.center.dx < row.center.dx;
+  final intrusion = onLeft ? obstacle.right + gap - row.left : row.right - obstacle.left + gap;
+  if (intrusion <= 0) return EdgeInsets.zero;
   final distance = math.max(math.max(obstacle.top - row.bottom, row.top - obstacle.bottom), 0.0);
-  if (distance == 0) return intrusion;
-  if (distance >= feather) return 0;
-  final t = 1 - distance / feather;
-  return intrusion * t * t * t * (t * (t * 6 - 15) + 10);
+  final double inset;
+  if (distance == 0) {
+    inset = intrusion;
+  } else if (distance >= feather) {
+    return EdgeInsets.zero;
+  } else {
+    final t = 1 - distance / feather;
+    inset = intrusion * t * t * t * (t * (t * 6 - 15) + 10);
+  }
+  return onLeft ? EdgeInsets.only(left: inset) : EdgeInsets.only(right: inset);
 }
 
 /// A floating overlay (rail, pill, toolbar) that content should step around.
@@ -57,11 +64,11 @@ class FloatingObstacle extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The start inset for an element at [row] in global coordinates.
-  double insetFor(Rect row, TextDirection direction) {
+  /// The padding an element at [row] (global coordinates) needs to clear the overlay.
+  EdgeInsets insetsFor(Rect row) {
     final obstacle = _bounds;
-    if (!_enabled || obstacle == null) return 0;
-    return startInset(row, obstacle, gap: gap, feather: feather, rtl: direction == TextDirection.rtl);
+    if (!_enabled || obstacle == null) return EdgeInsets.zero;
+    return avoidanceInsets(row, obstacle, gap: gap, feather: feather);
   }
 }
 
@@ -98,7 +105,7 @@ class _FloatingObstacleRegionState extends State<FloatingObstacleRegion> {
   }
 }
 
-/// Rebuilds with the start inset this widget currently needs to clear [obstacle].
+/// Rebuilds with the padding this widget currently needs to clear [obstacle].
 ///
 /// Use it when the inset should feed padding rather than shift the frame, for example a
 /// horizontal list whose first item steps aside while the list itself stays full width.
@@ -106,14 +113,14 @@ class AvoidanceBuilder extends StatefulWidget {
   const AvoidanceBuilder({super.key, required this.obstacle, required this.builder});
 
   final FloatingObstacle obstacle;
-  final Widget Function(BuildContext context, double inset) builder;
+  final Widget Function(BuildContext context, EdgeInsets insets) builder;
 
   @override
   State<AvoidanceBuilder> createState() => _AvoidanceBuilderState();
 }
 
 class _AvoidanceBuilderState extends State<AvoidanceBuilder> {
-  double _inset = 0;
+  EdgeInsets _insets = EdgeInsets.zero;
   ScrollPosition? _position;
   bool _measurePending = false;
 
@@ -167,16 +174,17 @@ class _AvoidanceBuilderState extends State<AvoidanceBuilder> {
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return;
     final rect = box.localToGlobal(Offset.zero) & box.size;
-    final inset = widget.obstacle.insetFor(rect, Directionality.of(context));
-    if ((inset - _inset).abs() >= 0.5) setState(() => _inset = inset);
+    final insets = widget.obstacle.insetsFor(rect);
+    final change = (insets.left - _insets.left).abs() + (insets.right - _insets.right).abs();
+    if (change >= 0.5) setState(() => _insets = insets);
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, _inset);
+  Widget build(BuildContext context) => widget.builder(context, _insets);
 }
 
-/// Gives up as much of [child]'s start edge as needed to clear [obstacle], depending on how
-/// close it currently is. The end edge stays where it is.
+/// Gives up as much of [child]'s edge next to [obstacle] as needed to clear it, depending on how
+/// close it currently is. The opposite edge stays where it is.
 class Avoid extends StatelessWidget {
   const Avoid({super.key, required this.obstacle, required this.child});
 
@@ -186,9 +194,6 @@ class Avoid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AvoidanceBuilder(
         obstacle: obstacle,
-        builder: (context, inset) => Padding(
-          padding: EdgeInsetsDirectional.only(start: inset),
-          child: child,
-        ),
+        builder: (context, insets) => Padding(padding: insets, child: child),
       );
 }

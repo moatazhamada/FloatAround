@@ -1,6 +1,6 @@
 name: float_around
 description: "Content that steps around a floating overlay, row by row, as you scroll. Per-element exclusion zones for floating navigation on tablets and foldables."
-version: 0.1.0
+version: 0.2.0
 homepage: https://github.com/moatazhamada/FloatAround
 repository: https://github.com/moatazhamada/FloatAround/tree/main/flutter/float_around
 topics: [layout, navigation, foldable, tablet, adaptive]

@@ -8,11 +8,14 @@ class FloatAroundDemo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'FloatAround',
-        theme: ThemeData(colorSchemeSeed: Colors.indigo),
-        darkTheme: ThemeData(colorSchemeSeed: Colors.indigo, brightness: Brightness.dark),
-        home: const DemoHome(),
-      );
+    title: 'FloatAround',
+    theme: ThemeData(colorSchemeSeed: Colors.indigo),
+    darkTheme: ThemeData(
+      colorSchemeSeed: Colors.indigo,
+      brightness: Brightness.dark,
+    ),
+    home: const DemoHome(),
+  );
 }
 
 const _destinations = [
@@ -52,18 +55,42 @@ class _DemoHomeState extends State<DemoHome> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 600;
     final colors = Theme.of(context).colorScheme;
+    final padding = MediaQuery.viewPaddingOf(context);
+    final cameraColumnOnRight =
+        padding.right > 0 && padding.right >= padding.left;
+    final cameraColumn =
+        Theme.of(context).platform == TargetPlatform.iOS &&
+        (padding.left > 0 || padding.right > 0);
     return Scaffold(
       body: Stack(
         children: [
-          _Feed(obstacle: _obstacle),
-          if (wide)
+          MediaQuery.removePadding(
+            context: context,
+            removeLeft: wide && cameraColumn,
+            removeRight: wide && cameraColumn,
+            child: _Feed(obstacle: _obstacle),
+          ),
+          if (wide && cameraColumn)
+            _CameraColumnPill(
+              obstacle: _obstacle,
+              onRight: cameraColumnOnRight,
+              columnWidth: cameraColumnOnRight ? padding.right : padding.left,
+              pill: _Pill(
+                selected: _selected,
+                onSelect: (i) => setState(() => _selected = i),
+              ),
+            )
+          else if (wide)
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: Padding(
                 padding: const EdgeInsetsDirectional.only(start: 12),
                 child: FloatingObstacleRegion(
                   obstacle: _obstacle,
-                  child: _Pill(selected: _selected, onSelect: (i) => setState(() => _selected = i)),
+                  child: _Pill(
+                    selected: _selected,
+                    onSelect: (i) => setState(() => _selected = i),
+                  ),
                 ),
               ),
             ),
@@ -81,10 +108,52 @@ class _DemoHomeState extends State<DemoHome> {
           : NavigationBar(
               selectedIndex: _selected,
               onDestinationSelected: (i) => setState(() => _selected = i),
-              destinations: [for (final (icon, label) in _destinations) NavigationDestination(icon: Icon(icon), label: label)],
+              destinations: [
+                for (final (icon, label) in _destinations)
+                  NavigationDestination(icon: Icon(icon), label: label),
+              ],
             ),
     );
   }
+}
+
+/// iOS on iPhone Duo keeps a column on the camera side for the camera and status, and places
+/// vertical bars in it right below them. The obstacle spans the status block and the pill, so
+/// rows reclaim the column everywhere below the pill instead of leaving it empty.
+class _CameraColumnPill extends StatelessWidget {
+  const _CameraColumnPill({
+    required this.obstacle,
+    required this.onRight,
+    required this.columnWidth,
+    required this.pill,
+  });
+
+  // ponytail: iOS does not report the status block's height in this pose; 100pt matches the
+  // iPhone Duo simulator with a little clearance. A platform channel reading the system bar frame would replace it.
+  static const _statusBlockHeight = 112.0;
+
+  final FloatingObstacle obstacle;
+  final bool onRight;
+  final double columnWidth;
+  final Widget pill;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: onRight ? Alignment.topRight : Alignment.topLeft,
+    child: SizedBox(
+      width: columnWidth,
+      child: FloatingObstacleRegion(
+        obstacle: obstacle,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: _statusBlockHeight),
+            pill,
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _Pill extends StatelessWidget {
@@ -117,7 +186,9 @@ class _Pill extends StatelessWidget {
                 tooltip: label,
                 style: IconButton.styleFrom(
                   fixedSize: const Size(56, 56),
-                  backgroundColor: index == selected ? colors.secondaryContainer : null,
+                  backgroundColor: index == selected
+                      ? colors.secondaryContainer
+                      : null,
                 ),
               ),
           ],
@@ -159,7 +230,9 @@ class _Feed extends StatelessWidget {
                 margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text('Row $i keeps its right edge and gives up only its start'),
+                  child: Text(
+                    'Row $i keeps its far edge and gives up only the side next to the pill',
+                  ),
                 ),
               ),
             ),
@@ -180,7 +253,9 @@ class _Hero extends StatelessWidget {
     return Container(
       height: 280,
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFF3949AB), Color(0xFF00897B)]),
+        gradient: LinearGradient(
+          colors: [Color(0xFF3949AB), Color(0xFF00897B)],
+        ),
       ),
       child: Stack(
         children: [
@@ -194,8 +269,17 @@ class _Hero extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FloatAround', style: text.displaySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
-                    const Text('The hero stays full-bleed. Only its text steps aside.', style: TextStyle(color: Colors.white)),
+                    Text(
+                      'FloatAround',
+                      style: text.displaySmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text(
+                      'The hero stays full-bleed. Only its text steps aside.',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ],
                 ),
               ),
@@ -208,10 +292,15 @@ class _Hero extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: ListenableBuilder(
                   listenable: obstacle,
-                  builder: (context, _) => FilterChip(
-                    selected: obstacle.enabled,
-                    onSelected: (value) => obstacle.enabled = value,
-                    label: Text(obstacle.enabled ? 'Avoidance on' : 'Avoidance off'),
+                  builder: (context, _) => Avoid(
+                    obstacle: obstacle,
+                    child: FilterChip(
+                      selected: obstacle.enabled,
+                      onSelected: (value) => obstacle.enabled = value,
+                      label: Text(
+                        obstacle.enabled ? 'Avoidance on' : 'Avoidance off',
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -231,16 +320,20 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-        child: Row(
-          spacing: 12,
-          children: [
-            Expanded(child: Avoid(obstacle: obstacle, child: const Divider(thickness: 2))),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const Expanded(child: Divider(thickness: 2)),
-          ],
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+    child: Row(
+      spacing: 12,
+      children: [
+        Expanded(
+          child: Avoid(obstacle: obstacle, child: const Divider(thickness: 2)),
         ),
-      );
+        Text(title, style: Theme.of(context).textTheme.titleLarge),
+        Expanded(
+          child: Avoid(obstacle: obstacle, child: const Divider(thickness: 2)),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Carousel extends StatelessWidget {
@@ -250,28 +343,31 @@ class _Carousel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AvoidanceBuilder(
-        obstacle: obstacle,
-        builder: (context, inset) => SizedBox(
-          height: 132,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsetsDirectional.only(start: 16 + inset, end: 16, top: 4, bottom: 8),
-            itemCount: 10,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => SizedBox(
-              width: 160,
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Align(
-                  alignment: AlignmentDirectional.bottomStart,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text('Card ${index + 1}', style: Theme.of(context).textTheme.titleMedium),
-                  ),
+    obstacle: obstacle,
+    builder: (context, insets) => SizedBox(
+      height: 132,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.fromLTRB(16 + insets.left, 4, 16 + insets.right, 8),
+        itemCount: 10,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) => SizedBox(
+          width: 160,
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Align(
+              alignment: AlignmentDirectional.bottomStart,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Card ${index + 1}',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
 }

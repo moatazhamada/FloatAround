@@ -1,40 +1,42 @@
-import 'dart:ui';
-
 import 'package:float_around/float_around.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const pill = Rect.fromLTRB(12, 400, 92, 700);
+  const leftPill = Rect.fromLTRB(12, 400, 92, 700);
+  const rightPill = Rect.fromLTRB(908, 400, 988, 700);
   Rect row(double top, {double left = 0}) => Rect.fromLTRB(left, top, 1000, top + 50);
-  double inset(Rect r, {Rect obstacle = pill, double feather = 140, bool rtl = false}) =>
-      startInset(r, obstacle, gap: 12, feather: feather, rtl: rtl);
+  EdgeInsets insets(Rect r, {Rect obstacle = leftPill, double feather = 140}) =>
+      avoidanceInsets(r, obstacle, gap: 12, feather: feather);
 
-  test('row beside the pill gets the full intrusion plus gap', () {
-    expect(inset(row(500)), closeTo(104, 0.01));
+  test('row beside a left pill gets the full intrusion plus gap on the left', () {
+    expect(insets(row(500)).left, closeTo(104, 0.01));
+    expect(insets(row(500)).right, 0);
+  });
+
+  test('row beside a right pill gets the full intrusion plus gap on the right', () {
+    expect(insets(row(500), obstacle: rightPill).right, closeTo(104, 0.01));
+    expect(insets(row(500), obstacle: rightPill).left, 0);
   });
 
   test('row far above the pill gets no inset', () {
-    expect(inset(row(100)), 0);
+    expect(insets(row(100)), EdgeInsets.zero);
   });
 
   test('row at the feather edge gets no inset', () {
-    expect(inset(row(210)), 0);
+    expect(insets(row(210)), EdgeInsets.zero);
   });
 
   test('row halfway through the feather gets half the inset', () {
-    expect(inset(row(280)), closeTo(52, 0.01));
+    expect(insets(row(280)).left, closeTo(52, 0.01));
   });
 
-  test('row already right of the pill gets no inset', () {
-    expect(inset(row(500, left: 200)), 0);
-  });
-
-  test('rtl pill on the right edge insets from the right', () {
-    expect(inset(row(500), obstacle: const Rect.fromLTRB(908, 400, 988, 700), rtl: true), closeTo(104, 0.01));
+  test('row already clear of the pill gets no inset', () {
+    expect(insets(row(500, left: 200)), EdgeInsets.zero);
   });
 
   test('zero feather insets only overlapping rows', () {
-    expect(inset(row(500), feather: 0), closeTo(104, 0.01));
-    expect(inset(row(330), feather: 0), 0);
+    expect(insets(row(500), feather: 0).left, closeTo(104, 0.01));
+    expect(insets(row(330), feather: 0), EdgeInsets.zero);
   });
 }
