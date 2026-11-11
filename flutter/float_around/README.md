@@ -6,6 +6,13 @@ A floating navigation pill on a tablet or unfolded foldable covers whatever scro
 
 ![demo](https://raw.githubusercontent.com/moatazhamada/FloatAround/main/docs/demo.gif)
 
+## Install
+
+```yaml
+dependencies:
+  float_around: ^0.2.0
+```
+
 ## Usage
 
 ```dart

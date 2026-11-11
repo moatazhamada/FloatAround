@@ -179,7 +179,7 @@ private fun DemoFeed(obstacle: FloatingObstacle) {
             item { SectionHeader("List rows", obstacle) }
             items(4) { index ->
                 Card(Modifier.avoid(obstacle).padding(horizontal = 16.dp).fillMaxWidth()) {
-                    Text("Row ${index + 1} keeps its right edge and gives up only its start", Modifier.padding(16.dp))
+                    Text("Row ${index + 1} keeps its far edge and gives up only the side next to the pill", Modifier.padding(16.dp))
                 }
             }
         }
@@ -221,7 +221,7 @@ private fun SectionHeader(title: String, obstacle: FloatingObstacle) {
     ) {
         HorizontalDivider(Modifier.weight(1f).avoid(obstacle), thickness = 2.dp)
         Text(title, style = MaterialTheme.typography.titleLarge)
-        HorizontalDivider(Modifier.weight(1f), thickness = 2.dp)
+        HorizontalDivider(Modifier.weight(1f).avoid(obstacle), thickness = 2.dp)
     }
 }
 

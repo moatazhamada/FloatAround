@@ -45,29 +45,39 @@ class FloatingObstacle(
     /** When false every avoiding element keeps its full width. */
     var enabled: Boolean by mutableStateOf(true)
 
-    internal fun insetPx(row: Rect?, density: Density, layoutDirection: LayoutDirection): Float {
+    internal fun insetsPx(row: Rect?, density: Density): AvoidanceInsets {
         val obstacleBounds = bounds
-        if (!enabled || row == null || obstacleBounds == null) return 0f
-        return with(density) {
-            startInset(row, obstacleBounds, gap.toPx(), feather.toPx(), layoutDirection == LayoutDirection.Rtl)
-        }
+        if (!enabled || row == null || obstacleBounds == null) return AvoidanceInsets.None
+        return with(density) { avoidanceInsets(row, obstacleBounds, gap.toPx(), feather.toPx()) }
+    }
+}
+
+/** Padding in pixels on the physical left or right edge; at most one of them is non-zero. */
+data class AvoidanceInsets(val left: Float, val right: Float) {
+    companion object {
+        val None = AvoidanceInsets(0f, 0f)
     }
 }
 
 /**
- * How far [row] must give up its start edge to clear [obstacle].
+ * The padding [row] needs to clear [obstacle] on the side the obstacle sits on.
  *
  * Rows that overlap the obstacle vertically get the full intrusion plus [gapPx]. Rows within
  * [featherPx] of it get a smootherstep-eased share. Rows further away, or already clear of it
- * horizontally, get zero. With [rtl] the obstacle is expected on the right edge.
+ * horizontally, get zero. An obstacle left of the row's centre insets the left edge; one to the
+ * right insets the right edge, so a pill can float on either side in any layout direction.
  */
-fun startInset(row: Rect, obstacle: Rect, gapPx: Float, featherPx: Float, rtl: Boolean): Float {
-    val intrusion = if (rtl) row.right - obstacle.left + gapPx else obstacle.right + gapPx - row.left
-    if (intrusion <= 0f) return 0f
+fun avoidanceInsets(row: Rect, obstacle: Rect, gapPx: Float, featherPx: Float): AvoidanceInsets {
+    val onLeft = obstacle.center.x < row.center.x
+    val intrusion = if (onLeft) obstacle.right + gapPx - row.left else row.right - obstacle.left + gapPx
+    if (intrusion <= 0f) return AvoidanceInsets.None
     val verticalDistance = maxOf(obstacle.top - row.bottom, row.top - obstacle.bottom, 0f)
-    if (verticalDistance == 0f) return intrusion
-    if (verticalDistance >= featherPx) return 0f
-    return intrusion * smootherstep(1f - verticalDistance / featherPx)
+    val inset = when {
+        verticalDistance == 0f -> intrusion
+        verticalDistance >= featherPx -> return AvoidanceInsets.None
+        else -> intrusion * smootherstep(1f - verticalDistance / featherPx)
+    }
+    return if (onLeft) AvoidanceInsets(inset, 0f) else AvoidanceInsets(0f, inset)
 }
 
 private fun smootherstep(t: Float): Float = t * t * t * (t * (t * 6f - 15f) + 10f)
@@ -93,8 +103,8 @@ private class ObstacleNode(var obstacle: FloatingObstacle) : Modifier.Node(), Gl
 }
 
 /**
- * Gives up as much of this element's start edge as needed to clear [obstacle], depending on how
- * close the element currently is to it. The end edge stays where it is.
+ * Gives up as much of this element's edge next to [obstacle] as needed to clear it, depending on
+ * how close the element currently is. The opposite edge stays where it is.
  */
 fun Modifier.avoid(obstacle: FloatingObstacle): Modifier = this then AvoidElement(obstacle)
 
@@ -116,10 +126,12 @@ private class AvoidNode(var obstacle: FloatingObstacle) :
 
     override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
         val maxInset = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
-        val inset = obstacle.insetPx(rowBounds, this, layoutDirection).roundToInt().coerceIn(0, maxInset)
-        val placeable = measurable.measure(constraints.offset(horizontal = -inset))
-        return layout(constraints.constrainWidth(placeable.width + inset), placeable.height) {
-            placeable.placeRelative(inset, 0)
+        val insets = obstacle.insetsPx(rowBounds, this)
+        val left = insets.left.roundToInt().coerceIn(0, maxInset)
+        val right = insets.right.roundToInt().coerceIn(0, maxInset - left)
+        val placeable = measurable.measure(constraints.offset(horizontal = -(left + right)))
+        return layout(constraints.constrainWidth(placeable.width + left + right), placeable.height) {
+            placeable.place(left, 0)
         }
     }
 }
@@ -129,8 +141,7 @@ private class AvoidNode(var obstacle: FloatingObstacle) :
 class AvoidanceTracker internal constructor(private val obstacle: FloatingObstacle) {
     internal var rowBounds: Rect? by mutableStateOf(null)
 
-    fun inset(density: Density, layoutDirection: LayoutDirection): Dp =
-        with(density) { obstacle.insetPx(rowBounds, density, layoutDirection).toDp() }
+    fun insets(density: Density): AvoidanceInsets = obstacle.insetsPx(rowBounds, density)
 }
 
 @Composable
@@ -142,8 +153,8 @@ fun Modifier.track(tracker: AvoidanceTracker): Modifier =
     onGloballyPositioned { tracker.rowBounds = it.boundsInRoot() }
 
 /**
- * Adds the tracked inset to the start padding. Use it as a carousel's content padding so the
- * frame stays full width while the first item steps aside.
+ * Adds the tracked inset to the padding on the obstacle's side. Use it as a carousel's content
+ * padding so the frame stays full width while the items next to the obstacle step aside.
  */
 fun PaddingValues.plusAvoidance(tracker: AvoidanceTracker, density: Density): PaddingValues =
     AvoidingPaddingValues(this, tracker, density)
@@ -153,16 +164,14 @@ private class AvoidingPaddingValues(
     private val tracker: AvoidanceTracker,
     private val density: Density,
 ) : PaddingValues {
-    override fun calculateLeftPadding(layoutDirection: LayoutDirection): Dp {
-        val extra = if (layoutDirection == LayoutDirection.Ltr) tracker.inset(density, layoutDirection) else 0.dp
-        return base.calculateLeftPadding(layoutDirection) + extra
-    }
+    override fun calculateLeftPadding(layoutDirection: LayoutDirection): Dp =
+        base.calculateLeftPadding(layoutDirection) + tracker.insets(density).left.toDp(density)
 
-    override fun calculateRightPadding(layoutDirection: LayoutDirection): Dp {
-        val extra = if (layoutDirection == LayoutDirection.Rtl) tracker.inset(density, layoutDirection) else 0.dp
-        return base.calculateRightPadding(layoutDirection) + extra
-    }
+    override fun calculateRightPadding(layoutDirection: LayoutDirection): Dp =
+        base.calculateRightPadding(layoutDirection) + tracker.insets(density).right.toDp(density)
 
     override fun calculateTopPadding(): Dp = base.calculateTopPadding()
     override fun calculateBottomPadding(): Dp = base.calculateBottomPadding()
 }
+
+private fun Float.toDp(density: Density): Dp = with(density) { this@toDp.toDp() }

@@ -23,7 +23,7 @@ dependencyResolutionManagement {
 
 // build.gradle.kts
 dependencies {
-    implementation("com.github.moatazhamada:FloatAround:0.1.0")
+    implementation("com.github.moatazhamada:FloatAround:0.2.0")
 }
 ```
 
@@ -61,14 +61,14 @@ Box(Modifier.fillMaxSize()) {
 | `Modifier.floatingObstacle(obstacle)` | the overlay publishes its bounds |
 | `Modifier.avoid(obstacle)` | an element gives up its start edge; its end edge stays put |
 | `rememberAvoidanceTracker` + `Modifier.track` + `PaddingValues.plusAvoidance` | a carousel shifts its content padding instead of its frame |
-| `startInset(row, obstacle, gap, feather, rtl)` | the pure function behind all of it, for porting to other toolkits |
+| `avoidanceInsets(row, obstacle, gap, feather)` | the pure function behind all of it, for porting to other toolkits |
 | `obstacle.enabled` | switch avoidance off, e.g. for before/after comparisons |
 
-The inset is read during measure, so scrolling re-lays out only the affected elements and nothing recomposes. Right-to-left layouts are supported with the overlay on the right edge.
+The inset is read during measure, so scrolling re-lays out only the affected elements and nothing recomposes. The pill can float on either edge: each element pads the side the pill is on, in left-to-right and right-to-left layouts alike.
 
 ## Flutter
 
-The same idea as a Flutter package lives in [`flutter/float_around`](flutter/float_around).
+The same idea as a Flutter package lives in [`flutter/float_around`](flutter/float_around), published as [`float_around: ^0.2.0`](https://pub.dev/packages/float_around).
 
 ```dart
 final obstacle = FloatingObstacle(gap: 12, feather: 140);
@@ -103,7 +103,7 @@ The Flutter package also lets the pill float on either edge (it pads whichever s
 ## The idea in one function
 
 ```
-intrusion = obstacle.right + gap - row.left          // mirrored for RTL
+intrusion = obstacle.right + gap - row.left          // mirrored when the obstacle is on the right
 if intrusion <= 0               -> 0                 // already clear
 d = vertical distance between row and obstacle      // 0 when they overlap
 if d == 0                       -> intrusion
