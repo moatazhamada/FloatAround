@@ -28,10 +28,10 @@
 
 <h1>Exclusion Zones for Floating Overlays:<br>Per-Element, Scroll-Linked Avoidance on Large Screens</h1>
 <div class="authors">Moataz Mohamed<br>House of Algorithms</div>
-<div class="meta">Idea paper · November 2026 · Reference implementation: github.com/moatazhamada/FloatAround</div>
+<div class="meta">Idea paper · November 2026 · Reference implementations: github.com/moatazhamada/FloatAround (Jetpack Compose) and pub.dev/packages/float_around (Flutter)</div>
 
 <div class="abstract"><b>Abstract</b>
-Floating navigation surfaces such as pill-shaped rails are increasingly common on tablets and unfolded foldables. They free space compared with edge-docked navigation, but they also cover whatever scrolls underneath them. The two prevailing responses, a page-wide inset or letting content pass underneath, either waste the space the overlay was meant to free or hide content. We describe <i>exclusion zones</i>, a layout pattern in which every element computes its own inset from its current distance to the overlay, easing in over a short feather distance with a smootherstep curve. The inset is a pure function of geometry rather than an animation, so it stays synchronised with scrolling, folding and resizing. We distinguish four element roles (shifting, compressing, padding-shifting and full-bleed), present the algorithm, discuss related techniques in text layout and platform inset systems, and provide an open-source Jetpack Compose implementation. We close with the limitations of the approach and a proposed user study.
+Floating navigation surfaces such as pill-shaped rails are increasingly common on tablets and unfolded foldables. They free space compared with edge-docked navigation, but they also cover whatever scrolls underneath them. The two prevailing responses, a page-wide inset or letting content pass underneath, either waste the space the overlay was meant to free or hide content. We describe <i>exclusion zones</i>, a layout pattern in which every element computes its own inset from its current distance to the overlay, easing in over a short feather distance with a smootherstep curve. The inset is a pure function of geometry rather than an animation, so it stays synchronised with scrolling, folding and resizing. We distinguish four element roles (shifting, compressing, padding-shifting and full-bleed), present the algorithm, discuss related techniques in text layout and platform inset systems, and provide an open-source Jetpack Compose implementation. Reference implementations exist for Jetpack Compose and Flutter, and the pattern has been trialled in a Quran memorization app. We close with the limitations of the approach and a proposed user study.
 </div>
 <div class="kw"><b>Keywords:</b> adaptive layout, large screens, foldables, floating navigation, exclusion paths, UI design patterns, Jetpack Compose.</div>
 
@@ -72,13 +72,13 @@ Floating navigation surfaces such as pill-shaped rails are increasingly common o
 <ul>
   <li>Content is never covered while rows far from the overlay keep the full width.</li>
   <li>Because the inset is derived from position, scrolling, folding, unfolding and resizing need no special handling: when the obstacle or the element moves, the inset follows.</li>
-  <li>Shifting text can rewrap and change height, which moves the elements below it (Section 5).</li>
+  <li>Shifting text can rewrap and change height, which moves the elements below it (Section 7).</li>
   <li>Each element must declare its role. This is a design decision per component, not a global switch.</li>
 </ul>
 
 <h2>3. Algorithm</h2>
-<p>Let the element bounds be <i>r</i> and the obstacle bounds <i>o</i>, both in a shared coordinate space, with gap <i>g</i> and feather <i>f</i>. For an obstacle on the start edge in a left-to-right layout:</p>
-<pre>intrusion = o.right + g - r.left              (RTL: r.right - o.left + g)
+<p>Let the element bounds be <i>r</i> and the obstacle bounds <i>o</i>, both in a shared coordinate space, with gap <i>g</i> and feather <i>f</i>. The side to pad is taken from the geometry itself: if the obstacle's centre lies left of the element's centre the element pads its left edge, otherwise its right edge. This lets the same rule serve a leading rail, a trailing rail and right-to-left layouts. For an obstacle on the left:</p>
+<pre>intrusion = o.right + g - r.left              (obstacle on the right: r.right - o.left + g)
 if intrusion &lt;= 0        return 0            // already clear horizontally
 d = max(o.top - r.bottom, r.top - o.bottom, 0)  // vertical gap, 0 when overlapping
 if d == 0                return intrusion
@@ -96,21 +96,28 @@ Text(paragraph, Modifier.avoid(obstacle))
 HorizontalDivider(Modifier.weight(1f).avoid(obstacle))
 LazyRow(Modifier.track(tracker), contentPadding = base.plusAvoidance(tracker, density))</pre>
 
-<h2>5. Related work</h2>
+<p>The Flutter package <code>float_around</code> provides the same roles as widgets (<code>FloatingObstacleRegion</code>, <code>Avoid</code>, <code>AvoidanceBuilder</code>). Because Flutter does not repaint list items while a list scrolls, each element listens to the scroll position and reads its global position after the frame.</p>
+
+<h2>5. Known uses and platform placement</h2>
+<p><b>Hafiz.</b> In a trial build of Hafiz, a Quran memorization app, the full-height navigation rail on large screens was replaced by a floating pill. Avoidance was applied at the two list containers every home-screen row passes through, so no individual card changed. On a half-opened foldable in book posture the home column moves to the pane the pill does not cover.</p>
+<p><b>Camera-side columns on iOS.</b> On iPhone Duo, iOS reserves a column on the camera side for the camera and status indicators and places vertical bars in it directly below them [8]; the rest of that column is padded away for the full height. Treating the status block plus the pill as one obstacle lets rows reclaim the column everywhere below the pill. On iPad the pill follows the system sidebar on the leading edge [3].</p>
+
+<h2>6. Related work</h2>
 <p><b>Text exclusion paths.</b> Apple's TextKit lets a text container exclude arbitrary paths so that lines flow around them [1], and CSS Shapes lets inline content wrap around a float's shape [2]. These are the closest conceptual relatives: per-line avoidance of an obstacle. They operate on lines of text inside a single text container and are evaluated once per layout, not per element across a scrolling page.</p>
 <p><b>Background extension.</b> iPadOS 26 floats the sidebar and lets content extend beneath it, mirroring and blurring the content into the covered area so that it appears continuous [3][4]. This preserves full-bleed imagery, which corresponds to the full-bleed role here, but does not move interactive or textual content out from under the overlay.</p>
 <p><b>Window insets and rulers.</b> Android reports system bars, cutouts and the IME as window insets, and Compose's <code>WindowInsetsRulers</code> with <code>Modifier.fitInside</code> lets a layout fit within such regions, including custom ones [7]. The documentation cautions against using them inside scroll containers; insets are designed for page-level safe areas rather than for elements whose distance to a region changes every frame.</p>
 <p><b>Collapsing and scroll-aware bars.</b> Material's scroll behaviours hide or collapse app bars in response to scrolling [6]. They move the overlay out of the way; exclusion zones move the content instead and keep the navigation visible.</p>
 
-<h2>6. Limitations and future work</h2>
+<h2>7. Limitations and future work</h2>
 <ul>
   <li><b>Rewrapping.</b> A shifting paragraph that narrows can gain a line and push following elements down. The feather makes the change gradual, but it remains a vertical side effect of a horizontal adjustment.</li>
   <li><b>One-frame latency.</b> Element positions are observed after layout, so the inset reflects the previous frame's position. At ordinary scroll speeds this was not perceptible in our tests; a ruler-based implementation could remove it.</li>
-  <li><b>Single edge.</b> The reference implementation handles one obstacle on the start edge. Multiple obstacles and top or bottom overlays (floating toolbars, mini-players) are natural extensions: the inset becomes the maximum over obstacles per edge.</li>
+  <li><b>Single obstacle.</b> Each implementation tracks one obstacle on a horizontal edge. Multiple obstacles and top or bottom overlays (floating toolbars, mini-players) are natural extensions: the inset becomes the maximum over obstacles per edge.</li>
+  <li><b>Unreported system regions.</b> iOS does not report the height of the status block in the iPhone Duo camera column; the implementation uses a measured constant.</li>
   <li><b>No user evaluation yet.</b> We propose a within-subjects study comparing three conditions (content under the overlay, page-wide inset, exclusion zones) on reading speed, mis-taps near the overlay, perceived motion and preference, on an unfolded foldable and a tablet.</li>
 </ul>
 
-<h2>7. Conclusion</h2>
+<h2>8. Conclusion</h2>
 <p>Floating overlays turn navigation into an obstacle inside the content area. Treating that obstacle the way typography treats a figure, as something each line or element flows around, keeps content visible without giving up the space floating navigation was meant to create. Defining the inset as a pure, eased function of geometry rather than as an animation makes the behaviour stable across scrolling, folding and resizing, and keeps the implementation small.</p>
 
 <h2>References</h2>
@@ -122,6 +129,7 @@ LazyRow(Modifier.track(tracker), contentPadding = base.plusAvoidance(tracker, de
   <li>K. Perlin. Improving Noise. <i>ACM Transactions on Graphics</i> 21(3), Proc. SIGGRAPH 2002, 681–682.</li>
   <li>Google. <i>Adaptive app quality guidelines</i> and Material 3 navigation rail guidance. Android Developers.</li>
   <li>Google. <i>About WindowInsetsRulers</i>. Android Developers, Jetpack Compose documentation.</li>
+  <li>Apple. <i>Design for iPhone Duo</i>. Apple Developer Tech Talks, session 111466.</li>
 </ol>
 </body>
 </html>
